@@ -2,15 +2,17 @@
 
 import logging
 
+
 class Logger:
     """
-    Logger class for consistent logging.
+    Thin wrapper around Python's standard logging module.
+    Prevents duplicate handlers when instantiated multiple times.
     """
-    def __init__(self, name=__name__, level=logging.INFO):
+
+    def __init__(self, name: str = __name__, level: int = logging.INFO):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(level)
-        
-        # Avoid duplicate handlers if logger is instantiated multiple times
+
         if not self.logger.handlers:
             ch = logging.StreamHandler()
             ch.setLevel(level)
@@ -20,11 +22,14 @@ class Logger:
             ch.setFormatter(formatter)
             self.logger.addHandler(ch)
 
-    def info(self, message):
+    def info(self, message: str):
         self.logger.info(message)
 
-    def warning(self, message):
+    def warning(self, message: str):
         self.logger.warning(message)
 
-    def error(self, message):
+    def error(self, message: str):
         self.logger.error(message)
+
+    def debug(self, message: str):
+        self.logger.debug(message)
