@@ -11,3 +11,17 @@ recruiters_list.csv
 rouge/
 
 *.pdf
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+data/*.db
+data/*.db-*
+reports/*.csv
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+__venv__/
