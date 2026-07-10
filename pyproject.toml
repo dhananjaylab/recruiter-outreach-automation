@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recruiter-outreach-automation"
+version = "2.0.0"
+description = "Personalized recruiter outreach with deliverability hardening, follow-ups, and reply/bounce tracking."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "chardet>=5.0",
+    "openpyxl>=3.1",
+    "xlrd>=2.0",
+    "odfpy>=1.4",
+    "pdfplumber>=0.10",
+    "pydantic>=2.5",
+    "pydantic-settings>=2.1",
+    "python-dotenv>=1.0",
+    "dnspython>=2.4",
+]
+
+[project.optional-dependencies]
+llm = ["anthropic>=0.30"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1"]
+
+[project.scripts]
+recruiter-outreach = "recruiter_outreach.cli:main"
+recruiter-outreach-check-inbox = "recruiter_outreach.tracking.cli:main"
+recruiter-outreach-followups = "recruiter_outreach.followup.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
