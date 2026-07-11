@@ -7,7 +7,7 @@ from recruiter_outreach.delivery.rate_limiter import RateLimiter
 def test_allows_calls_up_to_limit():
     rl = RateLimiter(calls_per_period=3, period=60)
     for _ in range(3):
-        rl.wait()  # should not block
+        rl.wait()
     assert len(rl.timestamps) == 3
 
 
@@ -17,7 +17,7 @@ def test_blocks_and_waits_when_limit_exceeded():
     start = time.time()
     rl.wait()
     elapsed = time.time() - start
-    assert elapsed >= 0.8  # had to wait roughly the remainder of the 1s window
+    assert elapsed >= 0.8
 
 
 def test_thread_safety_no_lost_updates():

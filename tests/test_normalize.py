@@ -5,10 +5,10 @@ from recruiter_outreach.ingestion.normalize import normalize_columns, validate_a
 
 def test_column_aliases_are_mapped():
     df = pd.DataFrame({
-        "Full Name": ["Jane Doe"],
-        "Work Email": ["jane@corp.com"],
+        "Full Name":    ["Jane Doe"],
+        "Work Email":   ["jane@corp.com"],
         "Organisation": ["Corp"],
-        "Job Title": ["Recruiter"],
+        "Job Title":    ["Recruiter"],
     })
     out = normalize_columns(df)
     assert set(out.columns) >= {"Name", "Email", "Company", "Role"}
@@ -25,8 +25,8 @@ def test_first_last_name_merge():
 
 def test_invalid_emails_dropped():
     df = pd.DataFrame({
-        "Name": ["A", "B", "C"],
-        "Email": ["a@corp.com", "not-an-email", "c@corp.com"],
+        "Name":    ["A", "B", "C"],
+        "Email":   ["a@corp.com", "not-an-email", "c@corp.com"],
         "Company": ["X", "Y", "Z"],
     })
     clean, dropped = validate_and_clean(df)
@@ -36,8 +36,8 @@ def test_invalid_emails_dropped():
 
 def test_dedup_case_insensitive():
     df = pd.DataFrame({
-        "Name": ["A", "A2"],
-        "Email": ["dup@corp.com", "DUP@corp.com"],
+        "Name":    ["A", "A2"],
+        "Email":   ["dup@corp.com", "DUP@corp.com"],
         "Company": ["X", "X"],
     })
     clean, _ = validate_and_clean(df)

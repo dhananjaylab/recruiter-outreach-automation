@@ -42,7 +42,7 @@ def test_due_for_followup_respects_delay(db: Database):
 
 
 def test_due_for_followup_excludes_replied(db: Database):
-    with db._cursor() as cur:  # internal helper reused only for test setup
+    with db._cursor() as cur:
         cur.execute(
             "INSERT INTO sends (email, name, company, role, template_used, "
             "sequence_step, sent_at, status) VALUES (?, ?, ?, ?, ?, ?, datetime('now','-10 days'), 'sent')",

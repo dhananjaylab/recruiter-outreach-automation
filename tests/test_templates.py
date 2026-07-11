@@ -41,7 +41,7 @@ def test_render_missing_placeholder_raises(template_dir):
     ts = TemplateStore(template_dir)
     _, text = ts.select(role=None, sequence_step=0)
     with pytest.raises(ValueError):
-        ts.render(text, recruiter_name="Jane")  # missing company_name etc.
+        ts.render(text, recruiter_name="Jane")
 
 
 def test_missing_default_template_raises(tmp_path):
