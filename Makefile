@@ -4,7 +4,7 @@
 # root for common tasks like init, test, lint, and clean.
 # Reference: https://docs.python-guide.org/writing/structure/#makefile
 
-.PHONY: init install test lint clean docker-build docker-run help
+.PHONY: init install test lint clean docker-build docker-run run-api run-ui help
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
@@ -31,7 +31,15 @@ lint:
 	python -m py_compile recruiter_outreach/**/*.py
 	@echo "Syntax check passed."
 
-# ── Outreach commands ─────────────────────────────────────────────────────────
+# ── Web layer (FastAPI + Streamlit) ──────────────────────────────────────────
+
+run-api:
+	uvicorn recruiter_outreach.api.main:app --reload --port 8000
+
+run-ui:
+	streamlit run frontend/streamlit_app.py
+
+# ── Outreach commands (CLI, no web layer needed) ─────────────────────────────
 
 dry-run:
 	@echo "Usage: make dry-run FILE=recruiters.csv"
@@ -73,9 +81,11 @@ help:
 	@echo "  test          Run full test suite with coverage"
 	@echo "  test-fast     Run tests, stop on first failure"
 	@echo "  lint          Syntax-check all Python source files"
-	@echo "  dry-run       Preview outreach (FILE=recruiters.csv)"
-	@echo "  check-inbox   Scan inbox for bounces/replies"
-	@echo "  followups     Send due follow-up emails"
+	@echo "  run-api       Start the FastAPI backend (port 8000, auto-reload)"
+	@echo "  run-ui        Start the Streamlit frontend (port 8501)"
+	@echo "  dry-run       Preview outreach via CLI (FILE=recruiters.csv)"
+	@echo "  check-inbox   Scan inbox for bounces/replies via CLI"
+	@echo "  followups     Send due follow-up emails via CLI"
 	@echo "  docker-build  Build the Docker image"
 	@echo "  docker-run    Run outreach in Docker (needs .env + recruiters.csv)"
 	@echo "  clean         Remove bytecode, caches, and build artifacts"
