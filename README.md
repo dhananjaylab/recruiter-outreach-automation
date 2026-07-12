@@ -1,176 +1,261 @@
 # Recruiter Outreach Automation
 
-Sends personalized outreach emails to recruiters, loaded from CSV/TSV/Excel/JSON/PDF,
-with deliverability hardening, persistent send history, bounce/reply tracking,
-and follow-up sequences.
+A personalized cold-outreach tool for recruiters, with a FastAPI + Streamlit
+human-in-the-loop layer, Gmail OAuth2 delivery, deliverability hardening,
+scenario-based follow-up sequences, and bounce/reply tracking.
 
-## Project structure
+## What's new in v3.0
 
-Following the [Hitchhiker's Guide to Python](https://docs.python-guide.org/writing/structure/):
-the installable package lives at the **project root** (not inside `src/`), the
-`scripts/` wrapper layer is eliminated in favour of `console_scripts` entry
-points, and `tests/context.py` handles import resolution.
-
-```
-recruiter-outreach-automation/
-├── README.md
-├── LICENSE                         # MIT
-├── Makefile                        # init / test / lint / clean / docker-*
-├── setup.py                        # thin shim — real config is in pyproject.toml
-├── pyproject.toml                  # build, deps, entry points, pytest config
-├── requirements.txt                # runtime deps (mirrors pyproject.toml)
-├── .env.example                    # copy to .env and fill in credentials
-├── Dockerfile
-├── .github/workflows/ci.yml        # pytest on 3.10 / 3.11 / 3.12
-│
-├── recruiter_outreach/             # ← installable package at project root
-│   ├── __init__.py
-│   ├── py.typed                    # PEP 561 — inline type information shipped
-│   ├── cli.py                      # `recruiter-outreach` entry point
-│   ├── config.py                   # pydantic Settings + load_settings()
-│   ├── db.py                       # SQLite: sends / suppressions / meta
-│   ├── logging_setup.py
-│   ├── compliance/
-│   │   └── suppression.py          # unsubscribe footer + opt-out detection
-│   ├── delivery/
-│   │   ├── rate_limiter.py         # thread-safe sliding-window
-│   │   ├── warmup.py               # linear send-cap ramp
-│   │   ├── smtp_client.py          # per-thread SMTP connection pool
-│   │   └── sender.py               # OutreachManager — orchestrates a send run
-│   ├── followup/
-│   │   ├── cli.py                  # `recruiter-outreach-followups` entry point
-│   │   └── scheduler.py            # finds + sends due follow-ups
-│   ├── ingestion/
-│   │   ├── loader.py               # CSV / TSV / Excel / JSON / PDF → DataFrame
-│   │   ├── normalize.py            # ~30 column-alias mappings + dedup
-│   │   └── pdf_extract.py          # 3-tier: table → regex → LLM
-│   ├── personalization/
-│   │   ├── templates.py            # role-based + follow-up template selection
-│   │   └── llm_personalizer.py     # optional per-recruiter opening line
-│   ├── reporting/
-│   │   └── report.py               # per-run CSV + domain breakdown
-│   ├── tracking/
-│   │   ├── cli.py                  # `recruiter-outreach-check-inbox` entry point
-│   │   └── imap_tracker.py         # bounce / reply / unsubscribe detection
-│   └── verification/
-│       └── email_verifier.py       # format + MX + optional SMTP RCPT check
-│
-├── tests/
-│   ├── context.py                  # sys.path insertion (Hitchhiker's Guide pattern)
-│   ├── conftest.py                 # shared fixtures (db, template_dir)
-│   ├── test_db.py
-│   ├── test_email_verifier.py
-│   ├── test_normalize.py
-│   ├── test_rate_limiter.py
-│   ├── test_report.py
-│   ├── test_suppression.py
-│   ├── test_templates.py
-│   └── test_warmup.py
-│
-├── email_templates/
-│   ├── default.md
-│   ├── sde.md / mle.md / data_scientist.md
-│   └── followup_1.md
-│
-├── data/                           # outreach.db lives here (gitignored)
-├── reports/                        # per-run CSV reports (gitignored)
-└── docs/                           # Sphinx-ready
-    ├── conf.py
-    └── index.rst
-```
-
-### What changed from the previous layout
-
-| Before | After | Why |
+| Area | v2.0 | v3.0 |
 |---|---|---|
-| `src/recruiter_outreach/` | `recruiter_outreach/` at root | Guide: module shouldn't live in an ambiguous `src/` subdir |
-| `scripts/*.py` with `sys.path` hacks | Removed — `console_scripts` handles it | Redundant once the package is at root and installed |
-| `sys.path.insert` in `conftest.py` | `tests/context.py` imported once | Guide's canonical test-suite import pattern |
-| No `setup.py` | `setup.py` thin shim at root | Conventional root file; older toolchains need it |
-| No `Makefile` | `Makefile` with `init/test/lint/clean/docker-*` | Guide explicitly recommends this |
-| No `LICENSE` | `LICENSE` (MIT) | Guide calls it "arguably the most important file" |
-| No `docs/` | `docs/conf.py` + `docs/index.rst` | Guide recommends Sphinx-ready `docs/` at root |
-| No `py.typed` | `recruiter_outreach/py.typed` | PEP 561: signals that inline types are shipped |
-| `pyproject.toml` `where = ["src"]` | `where = ["."]`, no `pythonpath` in pytest | Matches flat layout |
+| Interface | CLI only | FastAPI REST + SSE API, Streamlit UI, CLI still works |
+| Sending | SMTP + app password | **Gmail API via OAuth2** (SMTP kept as a legacy fallback) |
+| Tracking | IMAP + app password | **Gmail API via OAuth2** (IMAP kept as a legacy fallback) |
+| Approval | Send immediately | Upload → preview → approve/reject individual rows → send |
+| Progress | Log lines only | Live-streamed progress (SSE) in the UI as each email sends |
+| Daily volume | Rate-limiter only (didn't actually cap daily volume) | True per-calendar-day cap (`DailySendGovernor`), backed by the DB |
+| Send timing | None | Optimal send-window advisory (Tue-Thu, mid-morning) |
+| Templates | Role-based (SDE/MLE/DS) + one generic follow-up | **Scenario-based** (cold, referral, post-application, informational interview, event follow-up, alumni) + 3-step follow-up sequence ending in a "breakup" email |
+| Subject lines | Hardcoded in Python | Embedded per-template, personalized |
 
-## Setup
+## Architecture
+
+```
+Streamlit UI (frontend/)  <---- REST + SSE ---->  FastAPI app (api/)
+                                                          |
+                       +----------------------------------+----------------------------+
+                       v                                  v                            v
+             recruiter_outreach/                recruiter_outreach/           recruiter_outreach/
+             delivery/ (send)                    tracking/ (bounces)          ingestion/ (parse files)
+                       |                                  |
+          +------------+------------+          +----------+-----------+
+          v                         v          v                        v
+  GmailOAuthTransport      SmtpTransport   GmailOAuthMailReader    ImapMailReader
+     (default)               (legacy)          (default)             (legacy)
+```
+
+`OutreachManager` and `InboxTracker` never talk to Gmail/SMTP/IMAP
+directly — they depend on the `EmailTransport` and `MailReader`
+interfaces (`delivery/transport.py`, `tracking/mail_reader.py`), the same
+Dependency Inversion pattern used throughout this codebase. Swapping
+providers is a config change (`EMAIL_PROVIDER=gmail_oauth|smtp`), not a
+code change.
+
+The CLI (`recruiter-outreach`, `recruiter-outreach-followups`,
+`recruiter-outreach-check-inbox`) still works exactly as before, on top
+of the same underlying package — the API is a new layer, not a
+replacement.
+
+## Quick start
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate       # Windows: .venv\Scripts\activate
 
-make install                    # pip install -e ".[dev]"
-# or without make:
 pip install -e ".[dev]"
+cp .env.example .env            # fill in EMAIL_USER at minimum
 ```
 
-Copy `.env.example` → `.env` and fill in your details.
+### 1. Connect Gmail (OAuth2 — no password stored)
 
-> **Gmail users:** use an [App Password](https://myaccount.google.com/apppasswords)
-> for both `EMAIL_PASSWORD` (SMTP) and IMAP — not your regular password.
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a
+   project and enable the **Gmail API**.
+2. Create an **OAuth 2.0 Client ID** of type *Web application*.
+3. Add `http://localhost:8000/auth/google/callback` as an authorized
+   redirect URI (matches `GOOGLE_OAUTH_REDIRECT_URI` in `.env`).
+4. Download the client secret JSON, save it at
+   `credentials/client_secret.json`.
+5. Start the API (below), then visit `http://localhost:8000/auth/google/login`
+   once in a browser — or click **Connect Gmail** in the Streamlit
+   sidebar. `credentials/token.json` is created automatically.
 
-## Running
+Don't want to set up Google Cloud OAuth? Set `EMAIL_PROVIDER=smtp` and
+`MAIL_READER_PROVIDER=imap` in `.env`, plus an
+[app password](https://myaccount.google.com/apppasswords) for
+`EMAIL_PASSWORD` — the legacy path still works identically to v2.0.
 
-After `pip install -e .`, three commands are available globally:
+### 2. Run the API + UI
 
 ```bash
-# Send outreach
-recruiter-outreach --csv  recruiters.csv
-recruiter-outreach --xlsx HR_contacts.xlsx
-recruiter-outreach --pdf  HR_contacts.pdf
-recruiter-outreach --json export.json --dry-run   # preview, sends nothing
+# Terminal 1
+make run-api          # uvicorn recruiter_outreach.api.main:app --reload --port 8000
 
-# Check for bounces / replies / unsubscribes (run periodically)
+# Terminal 2
+make run-ui            # streamlit run frontend/streamlit_app.py
+```
+
+Open the Streamlit URL it prints (typically `http://localhost:8501`).
+API docs (Swagger UI) are at `http://localhost:8000/docs`.
+
+### 3. Or keep using the CLI
+
+```bash
+recruiter-outreach --csv recruiters.csv --dry-run
+recruiter-outreach --csv recruiters.csv
 recruiter-outreach-check-inbox --since-days 14
-
-# Send due follow-ups (run daily, after check-inbox)
 recruiter-outreach-followups
 ```
 
-Or via `make`:
+## The human-in-the-loop flow
 
-```bash
-make dry-run FILE=recruiters.csv
-make check-inbox
-make followups
-```
+1. **Upload** a CSV/TSV/Excel/JSON/PDF file in the Streamlit "Upload &
+   Send" tab (or `POST /upload`). It's parsed, normalised, and validated
+   — nothing is sent yet.
+2. **Preview & approve** — an editable table shows every record with a
+   `Send?` checkbox. Uncheck rows you don't want to send to, or catch a
+   bad row before it goes out. The send-window advisory (🟢/🟡) tells you
+   whether now is a good time to send.
+3. **Send** — click "Approve & Send". Progress streams live: each
+   email's outcome (sent/failed/skipped, with reason) appears as it
+   happens, via Server-Sent Events (`POST /send`) — no polling, no job
+   queue infrastructure.
+4. **Track** — periodically run Inbox Tracking to detect bounces,
+   replies, and unsubscribe requests, which suppress/stop follow-ups
+   automatically.
+5. **Follow up** — the Follow-ups tab shows who's due for the next touch
+   and sends the 3-step sequence with the same live-progress view.
 
-### CLI flags
+## Outreach scenarios
 
-| Flag | Purpose |
+Beyond "cold outreach," a `Scenario` column (with ~6 recognised aliases:
+`scenario`, `outreach type`, `context`, etc.) lets each row pick the
+template that actually fits the situation:
+
+| Scenario | When to use it |
 |---|---|
-| `--csv / --tsv / --xlsx / --pdf / --json` | input file |
-| `--dry-run` | load, validate, preview — sends nothing |
-| `--save-csv OUTPUT` | save normalised list before sending |
-| `--no-llm` | disable LLM fallback for unstructured PDFs |
-| `--env-file PATH` | use a `.env` other than the default |
+| `cold` (default) | No prior contact — falls back to a role-based template (`sde`/`mle`/`data_scientist`) or `default.md` |
+| `referral` | A mutual contact suggested reaching out |
+| `post_application` | Following up after formally applying |
+| `informational_interview` | Asking for a short call, not a job, before applying |
+| `event_followup` | Met the recruiter at a conference/career fair |
+| `alumni` | Shared university/program as a connection point |
 
-### Suggested cron
+Add a matching `email_templates/<scenario>.md` file to customize any of
+these, or add new scenarios entirely — `TemplateStore.select()` looks
+for `<scenario>.md`, falling back to role, then `default.md`.
 
-```cron
-0 */4 * * * cd /path/to/project && .venv/bin/recruiter-outreach-check-inbox
-0 9   * * * cd /path/to/project && .venv/bin/recruiter-outreach-check-inbox
-0 10  * * * cd /path/to/project && .venv/bin/recruiter-outreach-followups
+### Subject lines are embedded in templates
+
+Any template can start with a `Subject: ...` line followed by a blank
+line before the body — it's parsed out and rendered separately from the
+body, so subject lines are personalized and easy to A/B without touching
+Python:
+
+```
+Subject: Quick question about opportunities at {company_name}
+
+Hi {recruiter_name},
+...
 ```
 
-## How the pieces fit together
+Templates without an embedded subject fall back to the previous
+hardcoded default.
 
-1. **Ingestion** (`ingestion/`) reads the input file, auto-detects encoding and
-   delimiter, maps ~30 column-name aliases onto `Name/Email/Company/Role`, validates
-   emails, and deduplicates.
-2. **Pre-send checks** (`delivery/sender.py` + `verification/`, `compliance/`, `db.py`):
-   skip if suppressed, already sent to, or no valid MX record.
-3. **Warm-up** (`delivery/warmup.py`) computes today's send cap from a linear ramp.
-4. **Personalization** (`personalization/`) picks a role-specific template (falling
-   back to `default.md`), optionally adds an LLM-generated opening line, and appends
-   an unsubscribe footer.
-5. **Delivery** (`delivery/smtp_client.py`, `sender.py`) sends via a per-thread SMTP
-   connection pool with exponential-backoff retries, recording every outcome to SQLite.
-6. **Reporting** (`reporting/report.py`) writes a per-run CSV to `reports/`.
-7. **Tracking** (`tracking/imap_tracker.py`) scans the inbox for bounces and replies,
-   suppressing bounced addresses and stopping follow-ups for repliers.
-8. **Follow-ups** (`followup/scheduler.py`) queries the database for recruiters due
-   for the next step and dispatches them.
+## Follow-up sequence
+
+`followup_1.md` -> `followup_2.md` -> `followup_3.md`, spaced
+`FOLLOWUP_DELAY_DAYS` apart (default 4), stopping automatically on reply
+or bounce:
+
+1. **Bump** — gentle "in case this got buried."
+2. **Add value** — a new angle or detail, not just a repeat.
+3. **Breakup** — "I'll take the silence as a sign, wishing you well" —
+   deliberately low-pressure. This tends to be the highest-reply-rate
+   touch in the sequence; closing the loop removes any awkwardness the
+   recipient might feel about not having responded.
+
+## Deliverability engineering
+
+- **True daily volume cap** (`DailySendGovernor`, `delivery/daily_governor.py`)
+  — separate from the sliding-window rate limiter
+  (`EMAIL_CALLS_PER_PERIOD`/`EMAIL_PERIOD`, which only smooths bursts
+  *within* a run). This is backed by an actual DB query for today's send
+  count, so a long-running or repeatedly-invoked process can't exceed
+  the intended daily volume — the previous design fed the warm-up cap
+  into the rate limiter, which reset every period indefinitely.
+- **Warm-up ramp** (`WARMUP_START_CAP` -> `WARMUP_CEILING` over
+  `WARMUP_DAYS`) for a new or low-volume sender.
+- **Send-window advisory** (`delivery/send_scheduler.py`) — surfaces
+  whether "now" is Tue-Thu mid-morning (the window 2026 cold-outreach
+  data consistently associates with better open/reply rates) in the UI
+  before you click send. Advisory by default; `SEND_WINDOW_ENFORCE=true`
+  makes it a hard gate.
+- **MX-record verification** (`VERIFY_MX`, default on) catches typo'd
+  domains before sending.
+- **Suppression list** — bounced/unsubscribed addresses are never
+  emailed again, checked on every send.
+- **Unsubscribe footer** on every email, with opt-out keyword detection
+  on replies.
+- **Resume link over attachment** — `RESUME_LINK` avoids the spam-filter
+  risk of PDF attachments; `RESUME_PATH` is a fallback.
+
+## API reference
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Health check — never fails, even before `.env` is configured |
+| `GET` | `/auth/google/login` | Redirects to Google's OAuth consent screen |
+| `GET` | `/auth/google/callback` | OAuth callback (handled automatically) |
+| `GET` | `/auth/google/status` | Connected account email + granted scopes |
+| `POST` | `/auth/google/logout` | Revokes and deletes the local token |
+| `POST` | `/upload` | Upload a file -> normalise -> preview (nothing sent) |
+| `POST` | `/send` | Approve & send a preview (SSE-streamed progress) |
+| `GET` | `/followups/due` | Who's due for the next follow-up step, grouped by step |
+| `POST` | `/followups/run` | Send all due follow-ups (SSE-streamed progress) |
+| `POST` | `/tracking/check` | Scan the inbox for bounces/replies/unsubscribes |
+| `GET`/`POST`/`DELETE` | `/suppressions` | View / add / remove the suppression list |
+| `GET` | `/reports` | List past run reports |
+| `GET` | `/reports/{filename}` | Download a specific report CSV |
+| `GET` | `/reports/deliverability` | Aggregate bounce/reply rate across all sends |
+
+Full interactive docs at `/docs` once the API is running.
+
+## Project structure
+
+```
+recruiter-outreach-automation/
+├── recruiter_outreach/
+│   ├── api/                     # FastAPI layer
+│   │   ├── main.py                # app assembly
+│   │   ├── dependencies.py        # Settings/Database DI
+│   │   ├── preview_store.py       # in-process TTL store (upload -> send handoff)
+│   │   ├── events.py              # SSE thread/queue bridge
+│   │   ├── schemas.py             # Pydantic request/response models
+│   │   └── routers/               # health, auth, ingestion, outreach, followups,
+│   │                               # tracking, suppressions, reports
+│   ├── auth/
+│   │   └── google_oauth.py      # OAuth2 web flow (login/callback/refresh/revoke)
+│   ├── delivery/
+│   │   ├── transport.py           # EmailTransport ABC + ProgressEvent
+│   │   ├── gmail_oauth_client.py  # GmailOAuthTransport (default)
+│   │   ├── smtp_client.py         # SmtpConnectionPool + SmtpTransport (legacy)
+│   │   ├── factory.py             # picks the configured transport
+│   │   ├── daily_governor.py      # true per-calendar-day send cap
+│   │   ├── send_scheduler.py      # optimal send-window advisor
+│   │   ├── sender.py              # OutreachManager — orchestrates a send run
+│   │   ├── rate_limiter.py        # sliding-window burst control
+│   │   └── warmup.py              # linear daily-volume ramp
+│   ├── tracking/
+│   │   ├── mail_reader.py         # MailReader ABC, GmailOAuthMailReader (default), ImapMailReader (legacy)
+│   │   └── imap_tracker.py        # InboxTracker — bounce/reply/unsubscribe detection
+│   ├── personalization/
+│   │   └── templates.py           # scenario/role/follow-up selection + subject parsing
+│   ├── ingestion/                 # CSV/TSV/Excel/JSON/PDF -> DataFrame
+│   ├── compliance/                # unsubscribe footer + suppression
+│   ├── reporting/                 # per-run CSV + deliverability stats
+│   ├── followup/                  # scheduler + CLI
+│   ├── verification/              # email format + MX + optional SMTP RCPT
+│   ├── db.py                      # SQLite: sends, suppressions, meta
+│   ├── config.py                  # pydantic Settings
+│   └── cli.py                     # `recruiter-outreach` entry point
+├── frontend/
+│   └── streamlit_app.py         # human-in-the-loop UI
+├── email_templates/              # scenario/role/follow-up .md templates
+├── tests/                        # 225 tests
+├── credentials/                  # Google OAuth client secret + token (gitignored)
+├── data/                         # outreach.db (gitignored)
+└── reports/                      # per-run CSV reports (gitignored)
+```
 
 ## Tests
 
@@ -180,29 +265,51 @@ make test
 pytest tests/ -v --cov=recruiter_outreach --cov-report=term-missing
 ```
 
-35 tests cover the rate limiter (including thread-safety), column normalisation/dedup,
-the database layer (suppression, dedup, follow-up eligibility), the warm-up ramp,
-template selection/rendering, the unsubscribe/opt-out heuristics, and report generation.
+225 tests, covering: the FastAPI routers (including the SSE thread/queue
+bridge, using `TestClient`), the Streamlit app's actual execution (via
+Streamlit's official `AppTest` harness — both offline and with a mocked
+healthy backend), the Gmail OAuth2 flow and both transport/reader
+implementations, the daily governor and send-window advisor, scenario
+template selection against the real shipped `email_templates/` content,
+plus everything from v2.0 (ingestion, normalization, rate limiting,
+warm-up, suppression, reporting).
 
 ## Docker
 
 ```bash
 make docker-build
 
+# CLI (default entrypoint)
 docker run --rm \
   -v $(pwd)/.env:/app/.env \
+  -v $(pwd)/credentials:/app/credentials \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/reports:/app/reports \
   -v $(pwd)/recruiters.csv:/app/recruiters.csv \
   recruiter-outreach --csv recruiters.csv
+
+# API (override the entrypoint)
+docker run --rm -p 8000:8000 \
+  -v $(pwd)/.env:/app/.env -v $(pwd)/credentials:/app/credentials \
+  -v $(pwd)/data:/app/data -v $(pwd)/reports:/app/reports \
+  --entrypoint uvicorn recruiter-outreach \
+  recruiter_outreach.api.main:app --host 0.0.0.0 --port 8000
 ```
 
-## Notes on deliverability
+## Suggested cron (CLI path, unchanged from v2.0)
 
-- **Resume link over attachment.** Set `RESUME_LINK` to a hosted copy (Drive, Notion,
-  personal site) — PDF attachments are one of the most common spam-filter triggers.
-- **Warm-up is meaningful but not a substitute for domain authentication.** SPF/DKIM/DMARC
-  live at the DNS/domain level and must be configured separately if you control the domain.
-- **SMTP RCPT verification is best-effort.** Most networks block outbound port 25;
-  `VERIFY_SMTP_RCPT` defaults to off. MX-record checking (`VERIFY_MX=true`, the default)
-  is fast, safe, and catches typo'd domains.
+```cron
+0 */4 * * * cd /path/to/project && .venv/bin/recruiter-outreach-check-inbox
+0 10  * * * cd /path/to/project && .venv/bin/recruiter-outreach-followups
+```
+
+## Notes
+
+- **Single-user, no auth** — this is scoped as a personal local tool
+  (CORS is wide open on the API). If you'd deploy this for multiple
+  people, add an auth layer and swap `PreviewStore`'s in-process dict for
+  something shared across workers.
+- **SSE, not a job queue** — `POST /send` and `POST /followups/run` run
+  the actual send synchronously in a background thread; progress is
+  bridged to the HTTP response via a `queue.Queue`. No Celery/Redis
+  needed at this scale.
