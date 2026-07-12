@@ -11,16 +11,20 @@ batch picks up the matching followup_<N>.md template.
 
 from __future__ import annotations
 
+from typing import Optional
+
 from recruiter_outreach.config import Settings
 from recruiter_outreach.db import Database
-from recruiter_outreach.delivery.sender import OutreachManager
+from recruiter_outreach.delivery.sender import OnEventCallback, OutreachManager
 from recruiter_outreach.logging_setup import get_logger
 from recruiter_outreach.reporting.report import RunReport
 
 logger = get_logger(__name__)
 
 
-def run_followups(settings: Settings, db: Database) -> list[RunReport]:
+def run_followups(
+    settings: Settings, db: Database, on_event: Optional[OnEventCallback] = None,
+) -> list[RunReport]:
     if not settings.followup_enabled:
         logger.info("Follow-ups disabled in config (FOLLOWUP_ENABLED=false).")
         return []
@@ -40,11 +44,14 @@ def run_followups(settings: Settings, db: Database) -> list[RunReport]:
     reports: list[RunReport] = []
     for step, rows in sorted(groups.items()):
         recruiters = [
-            {"Email": r["email"], "Name": r["name"], "Company": r["company"], "Role": r["role"]}
+            {
+                "Email": r["email"], "Name": r["name"], "Company": r["company"],
+                "Role": r["role"],
+            }
             for r in rows
         ]
         logger.info(f"Sending {len(recruiters)} follow-up(s) at sequence_step={step}.")
-        manager = OutreachManager(settings=settings, db=db, sequence_step=step)
+        manager = OutreachManager(settings=settings, db=db, sequence_step=step, on_event=on_event)
         reports.append(manager.send_emails_concurrently(recruiters))
 
     return reports

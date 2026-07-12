@@ -1,15 +1,15 @@
-Dear {recruiter_name},
+Subject: MLE opportunities at {company_name}
+
+Hi {recruiter_name},
 
 {opening_line}
-I'm reaching out about Machine Learning Engineer opportunities at {company_name}.
+I'm interested in Machine Learning Engineer roles at {company_name}.
 
-My background is in applied AI/ML and GenAI — building LLM-integrated systems, productionizing models, and working across the stack from data pipelines to APIs. I'm looking for a team where I can keep doing that kind of end-to-end ML engineering work.
+My background is applied AI/ML and GenAI — productionizing models, building LLM-integrated systems, and owning the pipeline from data to API. I'm looking for a team doing that kind of end-to-end ML engineering.
 
-I'd really appreciate hearing about any openings that might be a fit, or a referral if you think it's warranted.
+Would appreciate hearing about any relevant openings, or a pointer if now isn't the right time.
 
 {resume_line}
-
-Thank you for considering my note.
 
 Best,
 {sender_name}

@@ -1,10 +1,12 @@
+Subject: Re: {company_name} — quick bump
+
 Hi {recruiter_name},
 
-Just wanted to gently follow up on my note below in case it got buried — I'm still very interested in opportunities at {company_name} and would love to connect if there's a fit.
+Just bumping this in case it got buried — still very interested in opportunities at {company_name}.
 
 {resume_line}
 
-No worries at all if the timing isn't right — thanks again for your time.
+No worries if the timing isn't right — appreciate your time either way.
 
 Best,
 {sender_name}

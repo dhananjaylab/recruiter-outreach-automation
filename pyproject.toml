@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "recruiter-outreach-automation"
-version = "2.0.0"
-description = "Personalized recruiter outreach with deliverability hardening, follow-ups, and reply/bounce tracking."
+version = "3.0.0"
+description = "Personalized recruiter outreach with a FastAPI + Streamlit human-in-the-loop layer, Gmail OAuth2 delivery, deliverability hardening, follow-ups, and reply/bounce tracking."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
@@ -20,6 +20,14 @@ dependencies = [
     "pydantic-settings>=2.1",
     "python-dotenv>=1.0",
     "dnspython>=2.4",
+    "google-auth>=2.30",
+    "google-auth-oauthlib>=1.2",
+    "google-api-python-client>=2.140",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "streamlit>=1.38",
+    "requests>=2.32",
 ]
 
 [project.optional-dependencies]
@@ -38,7 +46,7 @@ recruiter-outreach-followups   = "recruiter_outreach.followup.cli:main"
 # ---------------------------------------------------------------------------
 [tool.setuptools.packages.find]
 where = ["."]
-exclude = ["tests*", "docs*"]
+exclude = ["tests*", "docs*", "frontend*"]
 
 [tool.pytest.ini_options]
 # No pythonpath manipulation needed: tests/context.py handles it, and

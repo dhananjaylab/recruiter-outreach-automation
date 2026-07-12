@@ -1,15 +1,15 @@
-Dear {recruiter_name},
+Subject: Data Scientist roles at {company_name}
+
+Hi {recruiter_name},
 
 {opening_line}
 I'm reaching out about Data Scientist opportunities at {company_name}.
 
-My background combines applied ML, experimentation, and backend engineering — I like working close to the data and shipping models as real, usable systems rather than notebooks. I'd welcome the chance to bring that to your team.
+My background combines applied ML, experimentation, and backend engineering — I like staying close to the data and shipping models as real systems, not just notebooks.
 
-I'd appreciate hearing about any relevant openings, or a referral if one seems warranted.
+Would love to hear about any relevant openings, or a referral if one makes sense.
 
 {resume_line}
 
-Thank you for your time.
-
-Best,
+Thank you,
 {sender_name}

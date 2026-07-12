@@ -29,6 +29,10 @@ COLUMN_ALIASES: dict[str, list[str]] = {
     "Role": [
         "role", "job title", "title", "position", "target role", "job",
     ],
+    "Scenario": [
+        "scenario", "outreach type", "outreach scenario", "context",
+        "situation", "email type", "template type",
+    ],
     # Intermediate columns, merged into Name before returning
     "_First": ["first name", "firstname", "first", "given name", "fname"],
     "_Last":  ["last name",  "lastname",  "last",  "surname", "family name", "lname"],
@@ -100,12 +104,13 @@ def _guess_company(context: str) -> str:
 def validate_and_clean(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     """Returns (clean_df, dropped_row_count)."""
     for col, default in [
-        ("Name", "HR"), ("Company", "your company"), ("Email", ""), ("Role", ""),
+        ("Name", "HR"), ("Company", "your company"), ("Email", ""),
+        ("Role", ""), ("Scenario", "cold"),
     ]:
         if col not in df.columns:
             df[col] = default
 
-    for col in ["Name", "Email", "Company", "Role"]:
+    for col in ["Name", "Email", "Company", "Role", "Scenario"]:
         df[col] = df[col].fillna("").astype(str).str.strip()
 
     before = len(df)
@@ -118,7 +123,8 @@ def validate_and_clean(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     df = df.drop_duplicates(subset="_email_lower", keep="first")
     df = df.drop(columns=["_email_lower"])
 
-    df["Name"]    = df["Name"].replace("", "HR")
-    df["Company"] = df["Company"].replace("", "your company")
+    df["Name"]     = df["Name"].replace("", "HR")
+    df["Company"]  = df["Company"].replace("", "your company")
+    df["Scenario"] = df["Scenario"].replace("", "cold")
 
     return df.reset_index(drop=True), dropped
