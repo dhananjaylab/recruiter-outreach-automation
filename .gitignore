@@ -56,5 +56,9 @@ reports/*.csv
 # The .env file holds real credentials — never commit it
 .env
 
+# Google OAuth2 client secrets and issued tokens — never commit these
+credentials/*.json
+!credentials/.gitkeep
+
 # Sphinx build output
 docs/_build/
