@@ -92,7 +92,7 @@ class TestRunFollowups:
             reports = run_followups(s, db)
 
         assert len(reports) == 1
-        MockMgr.assert_called_once_with(settings=s, db=db, sequence_step=1)
+        MockMgr.assert_called_once_with(settings=s, db=db, sequence_step=1, on_event=None)
         instance.send_emails_concurrently.assert_called_once()
         sent_batch = instance.send_emails_concurrently.call_args[0][0]
         assert sent_batch[0]["Email"] == "jane@corp.com"
@@ -149,3 +149,20 @@ class TestRunFollowups:
             run_followups(s, db)
 
         MockMgr.assert_not_called()
+
+    def test_on_event_forwarded_to_outreach_manager(self, tmp_path, db):
+        s = _settings(tmp_path)
+        _insert_old_send(db, "jane@corp.com", step=0)
+
+        def sink(evt):
+            pass
+
+        with patch(
+            "recruiter_outreach.followup.scheduler.OutreachManager"
+        ) as MockMgr:
+            instance = MockMgr.return_value
+            instance.send_emails_concurrently.return_value = RunReport()
+            run_followups(s, db, on_event=sink)
+
+        _, kwargs = MockMgr.call_args
+        assert kwargs["on_event"] is sink
