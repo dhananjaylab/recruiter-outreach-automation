@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.dry_run:
         print("\n--- DRY RUN: no emails will be sent ---")
-        cols = [c for c in ["Name", "Email", "Company", "Role"] if c in df.columns]
+        cols = [c for c in ["Name", "Email", "Company", "Role", "Scenario"] if c in df.columns]
         print(df[cols].to_string(index=False))
         print(f"\nTotal: {len(df)} records.")
         return 0
